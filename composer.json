@@ -12,10 +12,10 @@
     },
     "autoload": {
         "psr-4": {
-            "LeeJones\\NpmInstaller\\": "src/"
+            "ProlificJones\\NpmInstaller\\": "src/"
         }
     },
     "extra": {
-        "class": "LeeJones\\NpmInstaller\\Plugin"
+        "class": "ProlificJones\\NpmInstaller\\Plugin"
     }
 }

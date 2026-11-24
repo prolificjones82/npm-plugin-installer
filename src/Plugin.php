@@ -1,6 +1,6 @@
 <?php
 
-namespace LeeJones\NpmInstaller;
+namespace ProlificJones\NpmInstaller;
 
 use Composer\Composer;
 use Composer\EventDispatcher\EventSubscriberInterface;
@@ -39,14 +39,14 @@ class Plugin implements PluginInterface, EventSubscriberInterface
 
     public function run(Event $event): void
     {
-        $extra = $this->composer->getPackage()->getExtra()['npm-installer'] ?? null;
+        $extra = $this->collectConfig();
         if (!$extra) {
             return;
         }
 
         $dir = getcwd();
         $file = $dir . '/package.json';
-        $manager = $extra['manager'] ?? 'npm';
+        $manager = $extra['manager'];
         $process = new ProcessExecutor($this->io);
 
         if (!file_exists($file)) {
@@ -57,10 +57,10 @@ class Plugin implements PluginInterface, EventSubscriberInterface
             ) . "\n");
         }
 
-        $this->install($process, $manager, $extra['packages'] ?? [], false);
-        $this->install($process, $manager, $extra['dev-packages'] ?? [], true);
+        $this->install($process, $manager, $extra['packages'], false);
+        $this->install($process, $manager, $extra['dev-packages'], true);
 
-        if (!empty($extra['package-json'])) {
+        if ($extra['package-json']) {
             $data = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
             $data = $this->merge($data, $extra['package-json']);
             file_put_contents(
@@ -71,7 +71,42 @@ class Plugin implements PluginInterface, EventSubscriberInterface
         }
     }
 
-    /** @param array<string,string>|list<string> $packages name => version, or plain names */
+    /** Merges extra.npm-installer from installed packages, then the root package (which wins). */
+    private function collectConfig(): array
+    {
+        $configs = [];
+        foreach ($this->composer->getRepositoryManager()->getLocalRepository()->getPackages() as $package) {
+            if ($config = $package->getExtra()['npm-installer'] ?? null) {
+                $configs[] = $config;
+            }
+        }
+        if ($config = $this->composer->getPackage()->getExtra()['npm-installer'] ?? null) {
+            $configs[] = $config;
+        }
+        if (!$configs) {
+            return [];
+        }
+
+        $result = ['manager' => 'npm', 'packages' => [], 'dev-packages' => [], 'package-json' => []];
+        foreach ($configs as $config) {
+            foreach (['packages', 'dev-packages'] as $key) {
+                foreach ($config[$key] ?? [] as $name => $version) {
+                    if (is_int($name)) {
+                        // plain "name" or "name@version" string
+                        $name = $version;
+                        $version = null;
+                    }
+                    $result[$key][$name] = $version;
+                }
+            }
+            $result['package-json'] = $this->merge($result['package-json'], $config['package-json'] ?? []);
+            $result['manager'] = $config['manager'] ?? $result['manager'];
+        }
+
+        return $result;
+    }
+
+    /** @param array<string,?string> $packages name => version (null/empty for none, or name already includes @version) */
     private function install(ProcessExecutor $process, string $manager, array $packages, bool $dev): void
     {
         if (!$packages) {
@@ -80,7 +115,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface
 
         $specs = [];
         foreach ($packages as $name => $version) {
-            $specs[] = is_int($name) ? $version : $name . '@' . $version;
+            $specs[] = $version ? $name . '@' . $version : $name;
         }
 
         $cmd = $manager === 'yarn'

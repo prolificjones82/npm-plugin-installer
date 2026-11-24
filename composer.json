@@ -1,5 +1,5 @@
 {
-    "name": "leejones/npm-plugin-installer",
+    "name": "prolificjones/npm-plugin-installer",
     "description": "Installs npm packages and patches package.json after composer install/update.",
     "type": "composer-plugin",
     "license": "MIT",
